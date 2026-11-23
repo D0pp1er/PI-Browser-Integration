@@ -29,7 +29,7 @@ export async function connectChrome() {
   }
 }
 
-async function edgeEndpoint(profile: string) {
+async function browserEndpoint(profile: string) {
   try {
     const [port, path] = (await readFile(join(profile, "DevToolsActivePort"), "utf8")).trim().split(/\r?\n/);
     if (!/^\d{1,5}$/.test(port) || !/^\/devtools\/browser\/[\w-]+$/.test(path)) throw new Error();
@@ -42,28 +42,28 @@ async function edgeEndpoint(profile: string) {
   }
 }
 
-async function connectEdge(endpoint: string) {
+async function connectProfile(endpoint: string) {
   if (endpoint !== attached) {
     await control("", "connect", endpoint);
     attached = endpoint;
   }
 }
 
-export async function openOrConnectEdge() {
+export async function openOrConnectDefault() {
   const profile = process.env.PI_ASSISTANT_PROFILE;
   if (!profile) throw new Error("Start Pi with Form Assistant.exe to connect to Assistant Browser.");
 
-  let endpoint = await edgeEndpoint(profile);
+  let endpoint = await browserEndpoint(profile);
   if (!endpoint) {
     await exec(join(process.cwd(), "Form Assistant.exe"), ["--browser"], { timeout: 10000 });
     for (let attempt = 0; attempt < 25 && !endpoint; attempt++) {
       await delay(250);
-      endpoint = await edgeEndpoint(profile);
+      endpoint = await browserEndpoint(profile);
     }
   }
   if (!endpoint) throw new Error("Assistant Browser did not open. Close any previous Assistant Browser window, then try /browser-connect again.");
 
-  await connectEdge(endpoint);
+  await connectProfile(endpoint);
   useChrome = false;
 }
 
@@ -72,8 +72,8 @@ export async function browser(...args: string[]) {
   if (useChrome) return control("-chrome", "--auto-connect", ...args);
   if (!profile) return control("", ...args);
 
-  const endpoint = await edgeEndpoint(profile);
+  const endpoint = await browserEndpoint(profile);
   if (!endpoint) throw new Error("Enter /browser-connect in Pi to open or reconnect Assistant Browser.");
-  await connectEdge(endpoint);
+  await connectProfile(endpoint);
   return control("", "--cdp", endpoint, ...args);
 }

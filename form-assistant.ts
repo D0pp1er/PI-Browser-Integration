@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { browser, connectChrome, openOrConnectEdge } from "./browser-connection";
+import { browser, connectChrome, openOrConnectDefault } from "./browser-connection";
 import { registerPageTools } from "./browser-page";
 
 const fieldPattern = /^\s*-\s*(textbox|combobox|checkbox)\s+"([^"]+)"\s*\[[^\]]*\bref=(e\d+)\b/;
@@ -42,15 +42,15 @@ export default function (pi: ExtensionAPI) {
   let lastView: Awaited<ReturnType<typeof inspect>> | undefined;
   const clearPage = registerPageTools(pi);
   pi.registerCommand("browser-connect", {
-    description: "Connect to Assistant Browser (Edge), or use /browser-connect chrome for Chrome",
+    description: "Open Assistant Browser using your Windows default, or attach to regular Chrome with /browser-connect chrome",
     async handler(args, ctx) {
       const choice = args.trim().toLowerCase();
-      if (choice && choice !== "edge" && choice !== "chrome") {
-        ctx.ui.notify("Use /browser-connect for Edge or /browser-connect chrome for Chrome.", "warning");
+      if (choice && choice !== "default" && choice !== "chrome") {
+        ctx.ui.notify("Use /browser-connect for Assistant Browser or /browser-connect chrome for regular Chrome.", "warning");
         return;
       }
       if (choice === "chrome") await connectChrome();
-      else await openOrConnectEdge();
+      else await openOrConnectDefault();
       clearPage();
       lastView = undefined;
       ctx.ui.notify((choice === "chrome" ? "Chrome" : "Assistant Browser") + " connected. Use /browser-tab to choose a tab.", "info");

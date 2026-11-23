@@ -12,7 +12,7 @@ static class Launcher
     const string Endpoint = "http://127.0.0.1:9931/v1/models";
     const string Session = "76b62b15-b4cf-4f8e-8a95-b76575518073";
     static readonly string Root = AppDomain.CurrentDomain.BaseDirectory;
-    static readonly string Runtime = Path.Combine(Root, ".runtime");
+    static readonly string Runtime = InstallPaths.Find(Root, "data") ?? Path.Combine(Root, ".runtime");
 
     [STAThread]
     static void Main(string[] args)
@@ -51,8 +51,10 @@ static class Launcher
     {
         var home = Path.Combine(Runtime, "assistant");
         var sockets = Path.Combine(Runtime, "sockets");
-        var controller = Directory.GetFiles(Path.Combine(Runtime, "node_modules"),
-            "agent-browser.exe", SearchOption.AllDirectories).FirstOrDefault();
+        var modules = Path.Combine(Runtime, "node_modules");
+        var controller = InstallPaths.Existing(InstallPaths.Find(Root, "agent-browser"));
+        if (controller == null && Directory.Exists(modules))
+            controller = Directory.GetFiles(modules, "agent-browser.exe", SearchOption.AllDirectories).FirstOrDefault();
         if (controller == null) throw new Exception("The project is missing agent-browser.");
         Directory.CreateDirectory(home);
         Directory.CreateDirectory(sockets);
@@ -63,19 +65,22 @@ static class Launcher
         Environment.SetEnvironmentVariable("PI_CODING_AGENT_DIR", home);
         Environment.SetEnvironmentVariable("PI_TELEMETRY", "0");
         Environment.SetEnvironmentVariable("AGENT_BROWSER_SOCKET_DIR", sockets);
+        Environment.SetEnvironmentVariable("AGENT_BROWSER_HOME", Path.Combine(Runtime, "browser-home"));
         Environment.SetEnvironmentVariable("PI_ASSISTANT_BROWSER", controller);
         var browserSession = "assistant-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         Environment.SetEnvironmentVariable("PI_ASSISTANT_SESSION", browserSession);
 
-        Environment.SetEnvironmentVariable("PI_ASSISTANT_PROFILE", Path.Combine(home, "edge-profile"));
+        Environment.SetEnvironmentVariable("PI_ASSISTANT_PROFILE", InstallPaths.BrowserProfile(Runtime, InstallPaths.Browser(Root)));
         var arguments = "--offline --no-builtin-tools --no-extensions --no-mcp --no-context-files --no-skills"
             + " --session-id " + Session + " -e form-assistant.ts"
             + " --model " + Quote("local-lfm/" + Model)
             + " --thinking off --system-prompt assistant-prompt.txt";
         var piPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".pi\agent\bin\pi.cmd");
-        var piCommand = File.Exists(piPath) ? Quote(piPath) : "pi";
+        piPath = InstallPaths.Existing(InstallPaths.Find(Root, "pi"), piPath);
+        var piCommand = piPath == null ? "pi" : Quote(piPath);
+        var isExe = piPath != null && Path.GetExtension(piPath).Equals(".exe", StringComparison.OrdinalIgnoreCase);
         if (check) arguments += " --list-models";
-        using (var pi = Start("cmd.exe", "/d /c call " + piCommand + " " + arguments, check))
+        using (var pi = isExe ? Start(piPath, arguments, check) : Start("cmd.exe", "/d /c call " + piCommand + " " + arguments, check))
         {
             pi.WaitForExit();
             if (pi.ExitCode != 0) throw new Exception("Pi exited with code " + pi.ExitCode + ". Check the Pi installation.");
@@ -85,27 +90,23 @@ static class Launcher
 
     static void OpenBrowser()
     {
-        var edge = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            @"Microsoft\Edge\Application\msedge.exe");
-        if (!File.Exists(edge)) throw new Exception("Install Microsoft Edge to use Assistant Browser.");
-        var profile = Path.Combine(Runtime, @"assistant\edge-profile");
-        using (Start(edge, "--remote-debugging-port=0 --no-first-run --user-data-dir=" + Quote(profile) + " about:blank", false)) { }
+        var browser = InstallPaths.Browser(Root);
+        if (browser == null) throw new Exception("Choose an existing Microsoft Edge or Google Chrome installation in setup.");
+        var profile = InstallPaths.BrowserProfile(Runtime, browser);
+        using (Start(browser, "--remote-debugging-address=127.0.0.1 --remote-debugging-port=0 --no-first-run --user-data-dir=" + Quote(profile) + " about:blank", false)) { }
     }
 
     static Process StartModelIfNeeded()
     {
         if (ModelAvailable()) return null;
-        var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var cache = Path.Combine(user, @".cache\huggingface\hub\models--LiquidAI--LFM3-1.7B-GGUF\snapshots");
-        var weight = Directory.Exists(cache)
-            ? Directory.GetFiles(cache, "LFM3-1.7B-Q4_K_M.gguf", SearchOption.AllDirectories).FirstOrDefault()
-            : null;
-        var llama = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            @"Microsoft\WindowsApps\llama.exe");
-        if (weight == null || !File.Exists(llama))
-            throw new Exception("Open Llama, load LFM3-1.7B (Q4_K_M), then open Form Assistant again.");
+        var weight = InstallPaths.Existing(InstallPaths.Find(Root, "model"), InstallPaths.CachedModel());
+        var alias = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Microsoft\WindowsApps\llama.exe");
+        var llama = InstallPaths.Existing(InstallPaths.Find(Root, "llama"), alias);
+        if (weight == null || llama == null)
+            throw new Exception("Run Form Assistant Setup to find or download the local model and its runtime.");
 
-        var model = Start(llama, "serve -m " + Quote(weight) + " --alias " + Quote(Model)
+        var command = Path.GetFileName(llama).Equals("llama.exe", StringComparison.OrdinalIgnoreCase) ? "serve " : "";
+        var model = Start(llama, command + "-m " + Quote(weight) + " --alias " + Quote(Model)
             + " --host 127.0.0.1 --port 9931 --jinja -c 8192 -ngl 0 -t 6", true);
         for (var attempt = 0; attempt < 60 && !model.HasExited; attempt++)
         {

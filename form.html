@@ -1,0 +1,44 @@
+﻿<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Dummy appointment form</title>
+<style>
+body { font: 1.2rem system-ui; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
+label { display: block; margin-top: 1rem; }
+input, select, textarea, button { font: inherit; padding: .4rem; }
+button { display: block; margin-top: 1rem; }
+</style>
+<h1>Dummy appointment form</h1>
+<p>Use fictional details. Submission displays a receipt on this page.</p>
+<form id="appointment">
+  <label for="name">Full name</label>
+  <input id="name" name="name" required>
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required>
+  <label for="visit">Visit type</label>
+  <select id="visit" name="visit" required>
+    <option value="">Choose a visit type</option>
+    <option>Ticket office</option>
+    <option>General enquiry</option>
+  </select>
+  <fieldset>
+    <legend>Contact method</legend>
+    <label><input type="radio" name="contact" value="email"> Contact by email</label>
+    <label><input type="radio" name="contact" value="phone"> Contact by phone</label>
+  </fieldset>
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes"></textarea>
+  <label><input type="checkbox" name="dummy" value="yes" required> I am using dummy information</label>
+  <button type="submit">Submit dummy form</button>
+</form>
+<p id="receipt" role="status"></p>
+<script>
+const form = document.querySelector('form');
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(form));
+  document.querySelector('#receipt').textContent =
+    'Dummy receipt: ' + [values.name, values.email, values.visit, values.notes, values.dummy].join(' | ');
+});
+</script>
+</html>
